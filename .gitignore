@@ -1,0 +1,14 @@
+.DS_Store
+*.swp
+node_modules/
+
+# Never commit internal-only files
+*CHECKLIST*.md
+*private*.md
+*-secrets.*
+.env
+.env.*
+
+# OPC internal artifacts — never push to public repo
+evals.json
+ops/

@@ -1,0 +1,42 @@
+{
+  "name": "burncheck",
+  "version": "0.7.2",
+  "description": "Privacy-first burn-rate analyzer for Claude Code. Shows your last 7 days of Claude spend, per-model breakdown, and weekly cap risk — all from your local logs.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "usage",
+    "monitor",
+    "cost",
+    "tokens",
+    "billing",
+    "analytics",
+    "cli",
+    "privacy"
+  ],
+  "bin": {
+    "burncheck": "./bin/burncheck.js"
+  },
+  "main": "./bin/burncheck.js",
+  "engines": {
+    "node": ">=16"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Genie-J/burncheck.git"
+  },
+  "homepage": "https://genie-j.github.io/burncheck/",
+  "bugs": {
+    "url": "https://github.com/Genie-J/burncheck/issues"
+  },
+  "license": "MIT",
+  "author": "burncheck",
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node bin/burncheck.js"
+  }
+}

@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>BurnCheck — Know when Claude will cut you off, before it does</title>
+<meta name="description" content="Privacy-first burn-rate analyzer for Claude Code users. Predict weekly limit hits, spot cost-saving model swaps, all client-side.">
+<meta property="og:title" content="BurnCheck — Predict your Claude limit hits">
+<meta property="og:description" content="Paste your Claude Code session log, get a burn-rate forecast and cost-saving recommendations. 100% client-side, nothing uploaded.">
+<meta property="og:image" content="https://raw.githubusercontent.com/Genie-J/burncheck/main/screenshot.png">
+<meta property="og:url" content="https://genie-j.github.io/burncheck/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="BurnCheck — Predict your Claude limit hits">
+<meta name="twitter:description" content="Privacy-first analyzer for Claude Code paying users. Forecast weekly limit hits, find cost-saving model swaps. 100% client-side.">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/Genie-J/burncheck/main/screenshot.png">
+<style>
+  :root {
+    --ink: #1a1a1a; --muted: #6b6b6b; --line: #e4e4e4; --bg: #fafaf8;
+    --accent: #d4541c; --accent-dark: #a8400f; --ok: #2d8f4a; --warn: #c48a17; --bad: #c0392b;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 48px 24px 80px; }
+  header h1 { font-size: 42px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.02em; }
+  header h1 .flame { color: var(--accent); }
+  header .tagline { font-size: 19px; color: var(--muted); margin: 0 0 8px; }
+  header .privacy { font-size: 13px; color: var(--muted); margin: 0 0 40px; padding: 8px 12px;
+    background: #f0efe8; border-left: 3px solid var(--ok); display: inline-block; }
+
+  section.hero { padding: 32px; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    margin-bottom: 24px; }
+  section.hero h2 { font-size: 22px; margin: 0 0 8px; font-weight: 600; }
+  section.hero p { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+
+  .picker { border: 2px dashed var(--line); border-radius: 8px; padding: 32px; text-align: center;
+    cursor: pointer; transition: all 0.15s; background: #fdfdfb; }
+  .picker:hover { border-color: var(--accent); background: #fff7f2; }
+  .picker input[type="file"] { display: none; }
+  .picker .label { font-size: 16px; font-weight: 500; color: var(--ink); }
+  .picker .sub { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .picker .cmd { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; background: #eceadf;
+    padding: 6px 10px; border-radius: 4px; margin-top: 14px; display: inline-block; color: var(--ink); }
+
+  textarea { width: 100%; min-height: 140px; padding: 12px; border: 1px solid var(--line);
+    border-radius: 6px; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; resize: vertical; }
+  button.go { background: var(--accent); color: white; border: none; padding: 10px 20px;
+    border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; margin-top: 12px; }
+  button.go:hover { background: var(--accent-dark); }
+  button.go:disabled { background: #999; cursor: not-allowed; }
+
+  .status { margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .status.err { color: var(--bad); }
+  .status.ok { color: var(--ok); }
+
+  .report { margin-top: 32px; display: none; }
+  .report.active { display: block; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+    margin-bottom: 24px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  .kpi .num { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+  .kpi .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi.accent .num { color: var(--accent); }
+  .kpi.warn .num { color: var(--warn); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 20px;
+    margin-bottom: 20px; }
+  .card h3 { margin: 0 0 14px; font-size: 16px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { background: #f5f4ee; font-weight: 600; font-size: 12px; color: var(--muted); text-transform: uppercase; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-family: 'SF Mono', Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+  .bar { height: 8px; background: #efeee6; border-radius: 4px; overflow: hidden; margin: 3px 0; }
+  .bar > div { height: 100%; background: var(--accent); }
+
+  .recs { background: #fff9ee; border-left: 3px solid var(--warn); padding: 16px 20px; border-radius: 4px; }
+  .recs ul { margin: 8px 0 0; padding-left: 20px; }
+  .recs li { margin-bottom: 8px; }
+  .recs b { color: var(--accent-dark); }
+
+  .risk-high { color: var(--bad); font-weight: 600; }
+  .risk-med { color: var(--warn); font-weight: 600; }
+  .risk-low { color: var(--ok); }
+
+  /* Feature add-ons (preserved since v0.2+), restyled in v0.1 grammar */
+  .cta-banner { display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    background: linear-gradient(135deg, #fff7f2 0%, var(--card) 100%);
+    border: 1px solid var(--accent); border-radius: 10px; padding: 20px 24px; margin-bottom: 24px; }
+  .cta-banner .cta-left { flex: 1; min-width: 260px; }
+  .cta-banner .cta-title { font-size: 17px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .cta-banner .cta-title.live { color: var(--ok); }
+  .cta-banner .cta-sub { font-size: 13px; color: var(--muted); }
+  .cta-banner .cta-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .cta-banner .cta-primary { background: var(--accent); color: #fff; border: none;
+    padding: 12px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;
+    transition: background 0.15s; }
+  .cta-banner .cta-primary:hover { background: var(--accent-dark); }
+  .cta-banner .cta-primary:disabled { background: #999; cursor: not-allowed; }
+  .cta-banner .cta-status { font-size: 12px; color: var(--muted); }
+  .cta-banner .cta-status.ok { color: var(--ok); }
+  .cta-banner .cta-status.err { color: var(--bad); }
+
+  details.advanced { margin-top: 40px; padding: 16px 20px; background: #fdfdfb;
+    border: 1px solid var(--line); border-radius: 8px; }
+  details.advanced summary { cursor: pointer; font-size: 14px; color: var(--muted); font-weight: 500; }
+  details.advanced[open] summary { margin-bottom: 16px; color: var(--ink); }
+  details.advanced .adv-body { font-size: 13px; }
+
+  .cta-block { background: linear-gradient(135deg, var(--card) 0%, #fff7f2 100%);
+    border: 1px solid var(--accent); border-radius: 10px; padding: 24px; margin-top: 32px; }
+  .cta-block h3 { margin: 0 0 8px; color: var(--accent-dark); }
+  .cta-block p { margin: 0 0 14px; font-size: 14px; color: var(--ink); }
+  .cta-block .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .cta-block input[type="email"] { padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 14px; flex: 1; min-width: 220px; }
+  .cta-block button { background: var(--accent); color: #fff; border: none; padding: 9px 18px;
+    border-radius: 6px; cursor: pointer; font-weight: 500; }
+  .cta-block .fine { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .cta-tip { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+  .cta-tip a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .cta-tip a:hover { text-decoration: underline; }
+
+  kbd { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; }
+
+  footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted);
+    font-size: 13px; text-align: center; }
+  footer a { color: var(--muted); }
+
+  @media (max-width: 600px) {
+    .wrap { padding: 24px 16px 48px; }
+    header h1 { font-size: 32px; }
+    .cta-banner .cta-right { align-items: stretch; width: 100%; }
+    .cta-banner .cta-primary { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1><span class="flame">🔥</span>BurnCheck</h1>
+  <p class="tagline">How much did you spend on Claude Code this week?</p>
+  <p class="privacy"><span class="emoji">🔒</span>Nothing uploaded. Your logs stay in this browser tab.</p>
+</header>
+
+<!-- Primary CTA banner — always visible at top of report -->
+<section id="cta-banner" class="cta-banner">
+  <div class="cta-left">
+    <div class="cta-title" id="ctaTitle">👀 You're looking at sample data</div>
+    <div class="cta-sub" id="ctaSub">Point us at your real Claude Code logs and we'll replace this with your numbers in 2 seconds.</div>
+  </div>
+  <div class="cta-right">
+    <button class="cta-primary" id="btnAnalyzeMine">📊 See my real numbers →</button>
+    <input type="file" id="folderInput" webkitdirectory multiple style="display:none;">
+    <div class="cta-status" id="status"></div>
+  </div>
+</section>
+
+<div id="pickerHelp" style="display:none;background:var(--card);border-radius:12px;padding:32px 36px;margin:0 0 56px;">
+  <div style="font-size:22px;font-weight:400;margin-bottom:20px;letter-spacing:-0.02em;line-height:1.15;">Before you click — here's what to do in the folder picker</div>
+  <ol style="margin:0 0 24px 20px;padding:0;font-size:14px;line-height:1.75;color:var(--ink);">
+    <li>Press <kbd>⌘ ⇧ G</kbd> (Mac) or <kbd>Ctrl + L</kbd> (Win/Linux) — a small path input appears</li>
+    <li>Paste <code>~/.claude/projects</code> and press Enter</li>
+    <li><b>You'll see a list of subfolders — don't double-click any of them.</b> Just make sure the header says <code>projects</code>, then click <b>Upload</b> / <b>Select</b> at the bottom-right.</li>
+    <li>If Chrome asks "<i>Upload N files to this site?</i>" → click <b>Upload</b>. Nothing actually leaves your computer — that's just how Chrome phrases local file access.</li>
+  </ol>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+    <button class="btn btn-tangarine" id="btnOpenPicker">Got it — open folder picker →</button>
+    <button class="btn btn-ghost" id="btnCancelPicker">Cancel</button>
+  </div>
+</div>
+
+<div class="report" id="report">
+  <div class="kpi-grid" id="kpis"></div>
+
+  <div class="card">
+    <h3>Weekly limit forecast</h3>
+    <div id="forecast"></div>
+    <details style="margin-top:24px;font-size:13px;">
+      <summary style="cursor:pointer;color:var(--muted);font-weight:500;list-style:none;"><span style="display:inline-block;margin-right:6px;color:var(--muted);">→</span>Override caps with your real plan limits</summary>
+      <div style="margin-top:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;">
+        <label style="font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.12em;">Max $20 weekly<br><input type="number" id="capMax20" step="1" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-top:8px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg);"></label>
+        <label style="font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.12em;">Max $100 weekly<br><input type="number" id="capMax100" step="1" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-top:8px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg);"></label>
+        <label style="font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.12em;">Max $200 weekly<br><input type="number" id="capMax200" step="1" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;margin-top:8px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:var(--bg);"></label>
+      </div>
+      <button class="go" id="btnApplyCaps" style="margin-top:18px;padding:9px 18px;font-size:12px;">Re-run forecast</button>
+      <div style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.6;">Know your actual cap from a past throttle? Enter it here and forecast will use your numbers. Values persist locally, never uploaded.</div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h3>Model cost breakdown (last 7 days)</h3>
+    <div class="table-scroll">
+      <table id="modelTable">
+        <thead><tr><th>Model</th><th>Calls</th><th class="num">Input tok</th><th class="num">Output tok</th><th class="num">Est. cost</th><th class="num">Share</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Sessions at risk (close to 5h / heavy burn)</h3>
+    <div class="table-scroll">
+      <table id="sessionTable">
+        <thead><tr><th>Session</th><th>Started</th><th>Duration</th><th class="num">Tokens</th><th class="num">Est. cost</th><th>Risk</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><span class="emoji">💡</span>Cost-saving recommendations</h3>
+    <div class="recs" id="recs"></div>
+  </div>
+
+  <section class="share-card" id="shareCard">
+    <h3><span class="emoji">📣</span>Show off your burn</h3>
+    <p>Generate a shareable card — flex your weekly Claude spend on X, Threads, or Discord. Nothing uploaded; the image is made in your browser.</p>
+    <div class="share-controls">
+      <button class="btn btn-invert" id="btnGenCard"><span class="emoji">🎨</span>Generate share card</button>
+      <input id="shareHandle" placeholder="@your-handle (optional)">
+    </div>
+    <div id="shareResult" class="share-result" style="display:none;">
+      <canvas id="shareCanvas" width="1200" height="630"></canvas>
+      <div class="share-controls" style="margin-top:12px;">
+        <button class="btn btn-invert" id="btnDownloadCard">⬇ Download PNG</button>
+        <button class="btn btn-outline" id="btnCopyCard"><span class="emoji">📋</span>Copy to clipboard</button>
+        <a id="btnTweetCard" href="#" target="_blank" rel="noopener" class="btn btn-x">𝕏 Post on X →</a>
+      </div>
+      <p class="tip">Tip: download the PNG, then attach it to your post. X will show it as a big preview.</p>
+    </div>
+  </section>
+
+  <div class="cta-block">
+    <h3>Want auto-monitoring?</h3>
+    <p>BurnCheck v2 will run as a lightweight daemon: daily limit warnings, model-swap auto-suggestions, hosted dashboard. Planned <b>$9/mo</b>, founding users <b>$5/mo for life</b>. Current status: gauging interest.</p>
+    <div class="row">
+      <a class="btn btn-tangarine" href="https://github.com/Genie-J/burncheck" target="_blank" rel="noopener"><span class="emoji">⭐</span>Star the repo</a>
+      <a class="btn btn-ghost" href="https://github.com/Genie-J/burncheck/subscription" target="_blank" rel="noopener"><span class="emoji">🔔</span>Watch for Pro launch</a>
+    </div>
+    <div class="fine">Star = interest. Watch (Custom → Releases only) = we'll notify you one time when Pro ships.</div>
+    <div class="cta-tip">
+      Did this save you from a limit hit? <a href="https://github.com/Genie-J/burncheck/issues/new?title=%F0%9F%94%A5+Saved+me+from+a+limit+hit&body=Tell+us+how+BurnCheck+helped+you.+Feedback+keeps+us+building." target="_blank" rel="noopener">Tell us how</a> — feedback keeps BurnCheck free & alive.
+    </div>
+  </div>
+</div>
+
+<details class="advanced">
+  <summary>⚙️ Folder picker didn't work? Try the CLI route instead</summary>
+  <div class="adv-body">
+    <p style="margin:0 0 16px;color:var(--muted);line-height:1.65;">If your browser blocks folder access (Safari on iOS, or ultra-strict enterprise policy), run this one-liner in Terminal — it extracts only the usage metadata (no prompts, no code, no content), copies a compact JSON to your clipboard:</p>
+    <div style="background:var(--ink);color:var(--bg);padding:18px 20px;border-radius:8px;font-family:'JetBrains Mono','SF Mono',Menlo,monospace;font-size:12px;overflow-x:auto;position:relative;line-height:1.55;">
+      <button id="btnCopyCmd" style="position:absolute;top:12px;right:12px;background:transparent;color:var(--bg);border:1px solid rgba(245,241,232,0.25);padding:4px 12px;border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;font-family:'Inter',sans-serif;">Copy</button>
+      <code id="cmdText" style="color:var(--bg);background:transparent;padding:0;">find ~/.claude/projects -name "*.jsonl" -mtime -7 -exec cat {} + | jq -c 'select(.type=="assistant" and .message.usage) | {m:.message.model,u:.message.usage,t:.timestamp}' | pbcopy</code>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:12px 0;">Requires <code>jq</code> (<code>brew install jq</code>). On Linux, replace <code>pbcopy</code> with <code>xclip -selection clipboard</code>.</p>
+    <textarea id="pasteInput" placeholder="…then paste here (⌘V)."></textarea>
+    <button class="go" id="btnPaste">Analyze pasted data</button>
+  </div>
+</details>
+
+<!-- FAQ — SEO long-tail coverage for Claude weekly limit / usage / cost questions -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "When does the Claude weekly limit reset?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The Claude weekly limit resets every 7 days from when your first message in that window was sent. Anthropic does not publish the exact threshold — it varies by plan tier and has been adjusted multiple times since Max plans launched. Community-observed ranges are approximately $25/week on Max $20, $140/week on Max $100, and $320/week on Max $200, but treat these as ±30%. BurnCheck computes your actual burn rate from local logs and projects when you'll cross the cap."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I know how much of my Claude Max plan I've used?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Claude Code stores every session as a JSONL file in ~/.claude/projects/. Each file contains message.usage records with input_tokens, output_tokens, cache_creation_input_tokens, and cache_read_input_tokens. Multiply those by the model's published per-token rate (Opus $15/M input, Sonnet $3/M input, Haiku $0.25/M input) to get cost. BurnCheck reads these files in your browser and aggregates the last 7 days automatically."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I predict before hitting the Claude weekly cap?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. At current burn rate × 7, compare against your plan tier's community-reported cap. If the ratio is over 100%, you'll hit the limit before the week ends. BurnCheck visualizes this forecast and flags which specific day you'll likely cross. You can override the cap values with your own observed limit from a past throttle."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the 5-hour Claude session limit?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Claude Code enforces a 5-hour session window that starts with your first message. Within that window you have a token budget; once exceeded, you're throttled until the next 5-hour block. Multi-hour refactor sessions often hit this unexpectedly. BurnCheck flags sessions in your history that ran past 4 hours so you can spot the pattern."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How much does Claude Opus cost per call compared to Sonnet?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Opus is roughly 5× the input cost and 5× the output cost of Sonnet. A typical Opus call with heavy context can cost $1-$5, while the equivalent Sonnet call runs $0.20-$1. For most code-editing, refactoring, and straightforward debugging, Sonnet produces comparable output at 1/5 the cost. BurnCheck's recommendations section flags Opus calls that would likely have run fine on Sonnet and estimates weekly savings."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my Claude Code log data private if I use BurnCheck?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. BurnCheck is a single HTML file with no backend. Your ~/.claude/projects/ logs are read by the browser's File API locally. Nothing is uploaded, there are no analytics, no account is required. Open your browser DevTools Network tab while using BurnCheck — you'll see zero outbound requests after the page loads. Source code is public at github.com/Genie-J/burncheck."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the difference between BurnCheck and Claude-Code-Usage-Monitor or ccusage?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Claude-Code-Usage-Monitor and ccusage are terminal-based live session monitors — they show your current 5-hour block in real time. BurnCheck is a browser-based weekly forecasting tool — it aggregates the last 7 days and projects cap-crossing risk. Most users run both: ccusage for live awareness, BurnCheck when they want to answer 'will I make it through the week?'"
+      }
+    }
+  ]
+}
+</script>
+
+<section id="faq" style="margin-top:48px;padding:24px;background:var(--card);border:1px solid var(--line);border-radius:10px;">
+  <h2 style="font-size:20px;margin:0 0 16px;">Frequently asked</h2>
+
+  <details style="margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line);">
+    <summary style="font-weight:600;cursor:pointer;font-size:15px;">When does the Claude weekly limit reset?</summary>
+    <p style="color:var(--muted);font-size:14px;margin:10px 0 0;">Every 7 days from when your first message in that window was sent. Anthropic doesn't publish the exact threshold — it varies by plan tier and has been adjusted multiple times. Community-observed ranges: <b>~$25/week on Max $20</b>, <b>~$140/week on Max $100</b>, <b>~$320/week on Max $200</b> (treat as ±30%). BurnCheck computes your actual burn rate from local logs and projects when you'll cross.</p>
+  </details>
+
+  <details style="margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line);">
+    <summary style="font-weight:600;cursor:pointer;font-size:15px;">How do I know how much of my Claude Max plan I've used?</summary>
+    <p style="color:var(--muted);font-size:14px;margin:10px 0 0;">Claude Code stores every session as a JSONL file in <code>~/.claude/projects/</code>. Each contains <code>message.usage</code> records with input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens. Multiply by published rates (Opus $15/M input, Sonnet $3/M, Haiku $0.25/M) to get cost. BurnCheck reads these in your browser and aggregates last 7 days automatically.</p>
+  </details>
+
+  <details style="margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line);">
+    <summary style="font-weight:600;cursor:pointer;font-size:15px;">Can I predict before hitting the Claude weekly cap?</summary>
+    <p style="color:var(--muted);font-size:14px;margin:10px 0 0;">Yes. At current burn rate × 7, compare against your plan tier's community-reported cap. If the ratio exceeds 100%, you'll hit the limit before week end. BurnCheck visualizes this forecast and flags which specific day you'll likely cross. You can override cap values with your observed limit from a past throttle.</p>
+  </details>
+
+  <details style="margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line);">
+    <summary style="font-weight:600;cursor:pointer;font-size:15px;">What is the 5-hour Claude session limit?</summary>
+    <p style="color:var(--muted);font-size:14px;margin:10px 0 0;">Claude Code enforces a 5-hour session window starting with your first message. Within that window you have a token budget; once exceeded, you're throttled until the next 5-hour block. Multi-hour refactor sessions often hit this unexpectedly. BurnCheck flags sessions in your history that ran past 4 hours so you can spot the pattern.</p>
+  </details>
+
+  <details style="margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line);">
+    <summary style="font-weight:600;cursor:pointer;font-size:15px;">How much does Claude Opus cost per call vs Sonnet?</summary>
+    <p style="color:var(--muted);font-size:14px;margin:10px 0 0;">Opus is roughly 5× Sonnet's input + output cost. A typical Opus call with heavy context costs $1-$5; equivalent Sonnet call $0.20-$1. For most code-editing, refactoring, and straightforward debugging, Sonnet produces comparable output at 1/5 the cost. BurnCheck flags Opus calls that would likely run fine on Sonnet and estimates weekly savings.</p>
+  </details>
+
+  <details style="margin-bottom:12px;padding:12px 0;border-bottom:1px solid var(--line);">
+    <summary style="font-weight:600;cursor:pointer;font-size:15px;">Is my Claude Code log data private if I use BurnCheck?</summary>
+    <p style="color:var(--muted);font-size:14px;margin:10px 0 0;">Yes. BurnCheck is a single HTML file with no backend. Your <code>~/.claude/projects/</code> logs are read by the browser's File API locally. Nothing is uploaded; no analytics; no account. Open DevTools Network tab while using BurnCheck — zero outbound requests after page load. Source: <a href="https://github.com/Genie-J/burncheck" target="_blank" rel="noopener">github.com/Genie-J/burncheck</a>.</p>
+  </details>
+
+  <details style="padding:12px 0;">
+    <summary style="font-weight:600;cursor:pointer;font-size:15px;">How does BurnCheck compare to Claude-Code-Usage-Monitor or ccusage?</summary>
+    <p style="color:var(--muted);font-size:14px;margin:10px 0 0;">Claude-Code-Usage-Monitor and ccusage are terminal-based live session monitors — they show your current 5-hour block in real time. BurnCheck is browser-based weekly forecasting — it aggregates last 7 days and projects cap-crossing risk. Most users run both: ccusage for live awareness, BurnCheck when they want to answer "will I make it through the week?"</p>
+  </details>
+</section>
+
+<footer>
+  <p>BurnCheck is an independent open tool. Not affiliated with Anthropic.<br>
+  Built by indie devs who got throttled one too many times. <a href="https://github.com/Genie-J/burncheck" target="_blank" rel="noopener">Source on GitHub</a><br>
+  <span style="font-family:'SF Mono',Menlo,monospace;font-size:11px;opacity:0.6;">v0.7.2 · 2026-04-15 · share card warm cream palette</span></p>
+</footer>
+
+</div>
+
+<script>
+// ===== Pricing ($/1M tokens) — approximate published rates as of 2026-04 =====
+// Source: anthropic.com/pricing (users can override in UI later)
+const PRICING = {
+  // model substring → {in, out, cache_write_mult, cache_read_mult}
+  'opus':    { in: 15.00, out: 75.00, cw: 1.25, cr: 0.10 },
+  'sonnet':  { in:  3.00, out: 15.00, cw: 1.25, cr: 0.10 },
+  'haiku':   { in:  0.25, out:  1.25, cw: 1.25, cr: 0.10 },
+  'default': { in:  3.00, out: 15.00, cw: 1.25, cr: 0.10 },
+};
+const DEFAULT_CAPS = { max20: 25, max100: 140, max200: 320 };
+function loadCaps() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('burncheck.caps') || 'null');
+    return saved && typeof saved === 'object' ? { ...DEFAULT_CAPS, ...saved } : { ...DEFAULT_CAPS };
+  } catch (e) { return { ...DEFAULT_CAPS }; }
+}
+function saveCaps(c) { try { localStorage.setItem('burncheck.caps', JSON.stringify(c)); } catch (e) {} }
+let WEEKLY_CAPS = loadCaps();
+function refreshCapInputs() {
+  const m20 = document.getElementById('capMax20'), m100 = document.getElementById('capMax100'), m200 = document.getElementById('capMax200');
+  if (m20) m20.value = WEEKLY_CAPS.max20;
+  if (m100) m100.value = WEEKLY_CAPS.max100;
+  if (m200) m200.value = WEEKLY_CAPS.max200;
+}
+const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
+
+// ===== CTA banner state =====
+function setCTAMode(mode, detail) {
+  const title = document.getElementById('ctaTitle');
+  const sub = document.getElementById('ctaSub');
+  const btn = document.getElementById('btnAnalyzeMine');
+  if (mode === 'sample') {
+    title.textContent = '👀 You\'re looking at sample data';
+    title.classList.remove('live');
+    sub.textContent = 'Point us at your real Claude Code logs and we\'ll replace this with your numbers in 2 seconds.';
+    btn.textContent = '📊 See my real numbers →';
+  } else if (mode === 'live') {
+    title.textContent = '✅ This is your real Claude Code usage';
+    title.classList.add('live');
+    sub.textContent = detail || 'All numbers below are from your local logs. Nothing was uploaded.';
+    btn.textContent = '🔄 Re-analyze';
+  } else if (mode === 'loading') {
+    title.textContent = '⏳ Reading your files…';
+    sub.textContent = detail || 'Parsing in your browser. This takes a second or two.';
+    btn.disabled = true;
+  }
+  if (mode !== 'loading') btn.disabled = false;
+}
+
+// ===== Parsing =====
+function pricingFor(model) {
+  if (!model) return PRICING.default;
+  const m = model.toLowerCase();
+  if (m.includes('opus')) return PRICING.opus;
+  if (m.includes('sonnet')) return PRICING.sonnet;
+  if (m.includes('haiku')) return PRICING.haiku;
+  return PRICING.default;
+}
+function costOf(model, u) {
+  const p = pricingFor(model);
+  const inputBase = (u.input_tokens || 0) / 1e6 * p.in;
+  const output = (u.output_tokens || 0) / 1e6 * p.out;
+  const cacheWrite = (u.cache_creation_input_tokens || 0) / 1e6 * p.in * p.cw;
+  const cacheRead = (u.cache_read_input_tokens || 0) / 1e6 * p.in * p.cr;
+  return inputBase + output + cacheWrite + cacheRead;
+}
+
+async function parseFiles(fileList) {
+  const records = [];
+  const jsonlFiles = Array.from(fileList).filter(f => f.name.endsWith('.jsonl'));
+  if (jsonlFiles.length === 0) throw new Error('No .jsonl files found in selection');
+  let totalLines = 0;
+  for (const f of jsonlFiles) {
+    const text = await f.text();
+    const lines = text.split('\n');
+    totalLines += lines.length;
+    const sessionId = f.name.replace('.jsonl', '');
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const d = JSON.parse(line);
+        if (d.type === 'assistant' && d.message && d.message.usage) {
+          records.push({
+            session: sessionId,
+            path: f.webkitRelativePath || f.name,
+            model: d.message.model || 'unknown',
+            usage: d.message.usage,
+            ts: d.timestamp ? new Date(d.timestamp) : null,
+          });
+        }
+      } catch (e) { /* skip malformed line */ }
+    }
+  }
+  return { records, fileCount: jsonlFiles.length, lineCount: totalLines };
+}
+
+function parseText(text) {
+  const records = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const d = JSON.parse(line);
+      // Full log format: {type:"assistant", message:{model,usage}, timestamp}
+      if (d.type === 'assistant' && d.message && d.message.usage) {
+        records.push({
+          session: 'pasted', path: 'pasted',
+          model: d.message.model || 'unknown',
+          usage: d.message.usage,
+          ts: d.timestamp ? new Date(d.timestamp) : null,
+        });
+      }
+      // Compact format from CLI one-liner: {m, u, t}
+      else if (d.u && (d.m || d.model)) {
+        records.push({
+          session: 'pasted', path: 'pasted',
+          model: d.m || d.model || 'unknown',
+          usage: d.u,
+          ts: d.t ? new Date(d.t) : null,
+        });
+      }
+    } catch (e) { /* skip */ }
+  }
+  return { records, fileCount: 1, lineCount: text.split('\n').length };
+}
+
+// ===== Demo generator =====
+function demoRecords() {
+  const records = [];
+  const now = Date.now();
+  for (let d = 13; d >= 0; d--) {
+    const dayStart = now - d * 24 * 3600 * 1000;
+    const sessions = Math.floor(Math.random() * 4) + 2;
+    for (let s = 0; s < sessions; s++) {
+      const sessStart = dayStart + (Math.random() * 16 * 3600 * 1000);
+      const sessId = `demo-d${d}-s${s}`;
+      const callCount = Math.floor(Math.random() * 30) + 15;
+      const modelPick = Math.random();
+      let model;
+      if (modelPick < 0.55) model = 'claude-opus-4-6';
+      else if (modelPick < 0.9) model = 'claude-sonnet-4-6';
+      else model = 'claude-haiku-4-5';
+      for (let c = 0; c < callCount; c++) {
+        const callTs = sessStart + c * (Math.random() * 8 * 60 * 1000);
+        records.push({
+          session: sessId, path: `demo/${sessId}.jsonl`, model,
+          usage: {
+            input_tokens: Math.floor(Math.random() * 500) + 10,
+            output_tokens: Math.floor(Math.random() * 800) + 50,
+            cache_creation_input_tokens: Math.floor(Math.random() * 40000),
+            cache_read_input_tokens: Math.floor(Math.random() * 80000) + 1000,
+          },
+          ts: new Date(callTs),
+        });
+      }
+    }
+  }
+  return { records, fileCount: 0, lineCount: records.length, isDemo: true };
+}
+
+// ===== Analysis =====
+function analyze(records) {
+  if (records.length === 0) throw new Error('No assistant records with usage found');
+  // Filter: last 7 days
+  const now = Date.now();
+  const sevenAgo = now - 7 * 86400 * 1000;
+  const recent = records.filter(r => r.ts && r.ts.getTime() >= sevenAgo);
+  const allRange = records.filter(r => r.ts);
+
+  // Per-model aggregation (last 7d)
+  const byModel = {};
+  for (const r of recent) {
+    const key = r.model;
+    if (!byModel[key]) byModel[key] = { calls: 0, input: 0, output: 0, cacheW: 0, cacheR: 0, cost: 0 };
+    byModel[key].calls++;
+    byModel[key].input += r.usage.input_tokens || 0;
+    byModel[key].output += r.usage.output_tokens || 0;
+    byModel[key].cacheW += r.usage.cache_creation_input_tokens || 0;
+    byModel[key].cacheR += r.usage.cache_read_input_tokens || 0;
+    byModel[key].cost += costOf(r.model, r.usage);
+  }
+  const totalCost7d = Object.values(byModel).reduce((s, m) => s + m.cost, 0);
+  const totalTokens7d = Object.values(byModel).reduce((s, m) => s + m.input + m.output + m.cacheW + m.cacheR, 0);
+  const totalCalls7d = Object.values(byModel).reduce((s, m) => s + m.calls, 0);
+
+  // Sessions
+  const sessions = {};
+  for (const r of recent) {
+    if (!sessions[r.session]) sessions[r.session] = { ts: [], tokens: 0, cost: 0, models: {} };
+    if (r.ts) sessions[r.session].ts.push(r.ts.getTime());
+    sessions[r.session].tokens += (r.usage.input_tokens || 0) + (r.usage.output_tokens || 0) +
+      (r.usage.cache_creation_input_tokens || 0) + (r.usage.cache_read_input_tokens || 0);
+    sessions[r.session].cost += costOf(r.model, r.usage);
+    sessions[r.session].models[r.model] = (sessions[r.session].models[r.model] || 0) + 1;
+  }
+  const sessionList = Object.entries(sessions).map(([id, s]) => {
+    s.ts.sort();
+    const start = s.ts[0] || 0;
+    const end = s.ts[s.ts.length - 1] || start;
+    const durMs = end - start;
+    const risk = durMs > 4 * 3600 * 1000 ? 'high' :
+                 durMs > 3 * 3600 * 1000 ? 'med' : 'low';
+    return { id, start, end, durMs, tokens: s.tokens, cost: s.cost, risk, models: s.models };
+  }).sort((a, b) => b.cost - a.cost);
+
+  // Burn rate
+  const daysCovered = Math.max(1, Math.min(7, (now - Math.min(...recent.filter(r=>r.ts).map(r=>r.ts.getTime()))) / 86400 / 1000));
+  const costPerDay = totalCost7d / daysCovered;
+  const costPerWeek = costPerDay * 7;
+
+  // Forecast: days until hitting cap (detect plan from burn)
+  const plans = Object.entries(WEEKLY_CAPS).map(([k, cap]) => ({ plan: k, cap, daysToCap: (cap - totalCost7d) / Math.max(costPerDay, 0.01) }));
+
+  return {
+    recent, byModel, totalCost7d, totalTokens7d, totalCalls7d,
+    sessionList: sessionList.slice(0, 15),
+    daysCovered, costPerDay, costPerWeek, plans,
+  };
+}
+
+// ===== Rendering =====
+function fmtUSD(n) { return '$' + n.toFixed(n < 10 ? 2 : 1); }
+function fmtTok(n) { if (n >= 1e6) return (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n/1e3).toFixed(1) + 'K'; return String(n); }
+function fmtDur(ms) { const h = Math.floor(ms/3600000); const m = Math.floor((ms%3600000)/60000); return h > 0 ? `${h}h ${m}m` : `${m}m`; }
+function fmtWhen(ts) { const d = new Date(ts); return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+
+function render(a) {
+  // KPIs
+  const kpis = document.getElementById('kpis');
+  kpis.innerHTML = `
+    <div class="kpi accent"><div class="num">${fmtUSD(a.costPerWeek)}</div><div class="lbl">Projected / week</div></div>
+    <div class="kpi"><div class="num">${fmtUSD(a.totalCost7d)}</div><div class="lbl">Last 7 days cost</div></div>
+    <div class="kpi"><div class="num">${fmtTok(a.totalTokens7d)}</div><div class="lbl">Tokens burned (7d)</div></div>
+    <div class="kpi"><div class="num">${a.totalCalls7d}</div><div class="lbl">API calls (7d)</div></div>
+  `;
+
+  // Forecast
+  const fc = document.getElementById('forecast');
+  let fcHtml = `<p style="margin:0 0 12px;font-size:14px;color:var(--muted);">At your current burn of <b style="color:var(--ink);">${fmtUSD(a.costPerDay)}/day</b>, here's when you'd hit the weekly cap for each plan tier:</p>`;
+  fcHtml += '<div class="table-scroll"><table><thead><tr><th>Plan</th><th class="num">Approx weekly cap</th><th>Status after 7 days</th></tr></thead><tbody>';
+  for (const p of a.plans) {
+    const ratio = a.costPerWeek / p.cap;
+    const pct = Math.min(100, ratio * 100).toFixed(0);
+    const barClass = ratio >= 1 ? 'bar bad' : ratio >= 0.8 ? 'bar warn' : 'bar ok';
+    const pill = ratio >= 1 ? `<span class="risk-pill risk-high">OVER ${((ratio-1)*100).toFixed(0)}%</span>` :
+                   ratio >= 0.8 ? `<span class="risk-pill risk-med">${pct}% — tight</span>` :
+                   `<span class="risk-pill risk-low">${pct}% — OK</span>`;
+    fcHtml += `<tr><td><b>${p.plan.replace('max', 'Max $')}</b></td><td class="num">${fmtUSD(p.cap)}</td><td>${pill}</td></tr>`;
+  }
+  fcHtml += '</tbody></table></div>';
+  fcHtml += '<p style="margin:12px 0 0;font-size:12px;color:var(--muted);">Caps are approximate — Anthropic changes them and doesn\'t publish exact numbers. Adjust expectations ±30%.</p>';
+  fc.innerHTML = fcHtml;
+
+  // Model table
+  const mt = document.querySelector('#modelTable tbody');
+  mt.innerHTML = '';
+  const modelRows = Object.entries(a.byModel).sort((x, y) => y[1].cost - x[1].cost);
+  const totalForShare = modelRows.reduce((s, [_, m]) => s + m.cost, 0);
+  for (const [name, m] of modelRows) {
+    const share = totalForShare > 0 ? (m.cost / totalForShare * 100) : 0;
+    mt.innerHTML += `<tr>
+      <td><b>${name}</b></td>
+      <td>${m.calls}</td>
+      <td class="num">${fmtTok(m.input + m.cacheW + m.cacheR)}</td>
+      <td class="num">${fmtTok(m.output)}</td>
+      <td class="num">${fmtUSD(m.cost)}</td>
+      <td class="num">${share.toFixed(0)}%</td>
+    </tr>`;
+  }
+
+  // Session table
+  const st = document.querySelector('#sessionTable tbody');
+  st.innerHTML = '';
+  for (const s of a.sessionList) {
+    const dominant = Object.entries(s.models).sort((x,y)=>y[1]-x[1])[0][0];
+    st.innerHTML += `<tr>
+      <td class="session-id" title="${s.id}">${s.id.substring(0, 10)}<span class="model-tag">${dominant.replace('claude-','')}</span></td>
+      <td>${fmtWhen(s.start)}</td>
+      <td>${fmtDur(s.durMs)}</td>
+      <td class="num">${fmtTok(s.tokens)}</td>
+      <td class="num">${fmtUSD(s.cost)}</td>
+      <td><span class="risk-pill risk-${s.risk}">${s.risk.toUpperCase()}</span></td>
+    </tr>`;
+  }
+
+  // Recommendations
+  const recs = buildRecs(a);
+  document.getElementById('recs').innerHTML = '<ul>' + recs.map(r => `<li>${r}</li>`).join('') + '</ul>';
+
+  document.getElementById('report').classList.add('active');
+  window.LAST_ANALYSIS = a;
+  // Only scroll when user-initiated (not on auto-demo at page load)
+  if (window.BURNCHECK_USER_ACTION) {
+    document.getElementById('report').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function buildRecs(a) {
+  const recs = [];
+  const opus = a.byModel['claude-opus-4-6'] || Object.values(a.byModel).find(m => false) || null;
+  const opusEntry = Object.entries(a.byModel).find(([k]) => k.toLowerCase().includes('opus'));
+  const sonnetEntry = Object.entries(a.byModel).find(([k]) => k.toLowerCase().includes('sonnet'));
+
+  if (opusEntry) {
+    const [opName, op] = opusEntry;
+    const opShare = op.cost / a.totalCost7d;
+    if (opShare > 0.5) {
+      const potentialSaved = op.cost * 0.8; // rough — if 80% of opus calls were sonnet-suitable
+      recs.push(`<b>${(opShare*100).toFixed(0)}% of your cost is on ${opName}.</b> If half those calls could run on Sonnet (often fine for edits/refactors/simple queries), you'd save <b>~${fmtUSD(op.cost*0.4)}/week</b>. Rule of thumb: Opus for architecture/tricky debugging, Sonnet for everything else.`);
+    }
+    const cacheInefficient = op.cacheW > op.cacheR * 3;
+    if (cacheInefficient) {
+      recs.push(`<b>Cache is inefficient on ${opName}.</b> Cache writes (${fmtTok(op.cacheW)}) dominate reads (${fmtTok(op.cacheR)}), meaning context is rebuilt often. Cost hit: cache writes are 1.25x input, reads are 0.1x. Longer sessions with stable context would flip this ratio and save real money.`);
+    }
+  }
+
+  // Heavy sessions
+  const heavy = a.sessionList.filter(s => s.risk === 'high');
+  if (heavy.length > 0) {
+    recs.push(`<b>${heavy.length} session${heavy.length>1?'s':''} ran past 4 hours.</b> Claude's 5-hour session cap will interrupt mid-task. Consider breaking long sessions into checkpoints, or switching to Sonnet for the final stretch to extend runway.`);
+  }
+
+  // Forecast-based
+  const tightPlan = a.plans.find(p => a.costPerWeek / p.cap >= 0.8 && a.costPerWeek / p.cap < 1);
+  const overPlan = a.plans.find(p => a.costPerWeek / p.cap >= 1);
+  if (overPlan) {
+    recs.push(`<b>You're currently over the ${overPlan.plan.replace('max','Max $')} weekly cap</b> by ${(((a.costPerWeek/overPlan.cap)-1)*100).toFixed(0)}%. Options: (1) Upgrade to the next tier; (2) Shift ${((a.costPerWeek-overPlan.cap)/a.costPerWeek*100).toFixed(0)}% of usage to Sonnet/Haiku; (3) Accept that Thursdays–Fridays will be throttled.`);
+  } else if (tightPlan) {
+    recs.push(`<b>You're tight on ${tightPlan.plan.replace('max','Max $')}.</b> Heavy Friday usage will likely cross the cap. Save ~15% by moving early-week exploratory work to Haiku, reserving Opus for core work mid-week.`);
+  }
+
+  // Low burn
+  if (a.costPerWeek < 10) {
+    recs.push(`<b>You're light on usage (~${fmtUSD(a.costPerWeek)}/week).</b> Your current plan is probably over-provisioned — if you're on Max $100 or $200, downshift to $20 and pocket the difference.`);
+  }
+
+  if (recs.length === 0) {
+    recs.push(`<b>Usage looks balanced.</b> No red flags in your last 7 days. Keep an eye on weekly trends — BurnCheck is most useful when you run it every few days.`);
+  }
+
+  return recs;
+}
+
+// ===== Event wiring =====
+const statusEl = document.getElementById('status');
+function setStatus(msg, type) {
+  statusEl.className = 'status' + (type ? ' ' + type : '');
+  statusEl.textContent = msg;
+}
+
+// "See my real numbers" primary CTA — two-step: show help first, user confirms, THEN open picker
+document.getElementById('btnAnalyzeMine').addEventListener('click', () => {
+  window.BURNCHECK_USER_ACTION = true;
+  document.getElementById('pickerHelp').style.display = 'block';
+  document.getElementById('pickerHelp').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+document.getElementById('btnOpenPicker').addEventListener('click', () => {
+  document.getElementById('folderInput').click();
+});
+document.getElementById('btnCancelPicker').addEventListener('click', () => {
+  document.getElementById('pickerHelp').style.display = 'none';
+});
+
+document.getElementById('folderInput').addEventListener('change', async (e) => {
+  try {
+    if (!e.target.files || e.target.files.length === 0) return;
+    setCTAMode('loading', `Reading ${e.target.files.length} files…`);
+    setStatus(`Reading ${e.target.files.length} files…`, '');
+    const parsed = await parseFiles(e.target.files);
+    LAST_RECORDS = parsed.records;
+    const a = analyze(parsed.records);
+    render(a);
+    document.getElementById('pickerHelp').style.display = 'none';
+    setCTAMode('live', `${parsed.records.length.toLocaleString()} API calls across ${parsed.fileCount} sessions — parsed locally, nothing uploaded.`);
+    setStatus(`✓ ${parsed.records.length} records, ${parsed.fileCount} files.`, 'ok');
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'err');
+    setCTAMode('sample');
+    console.error(err);
+  }
+});
+
+document.getElementById('btnPaste').addEventListener('click', () => {
+  window.BURNCHECK_USER_ACTION = true;
+  try {
+    const text = document.getElementById('pasteInput').value;
+    if (!text.trim()) { setStatus('Paste some JSONL first', 'err'); return; }
+    const parsed = parseText(text);
+    LAST_RECORDS = parsed.records;
+    const a = analyze(parsed.records);
+    render(a);
+    setCTAMode('live', `${parsed.records.length.toLocaleString()} API calls — parsed locally from pasted data.`);
+    setStatus(`✓ ${parsed.records.length} records.`, 'ok');
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'err');
+  }
+});
+
+// Wire up cap override controls
+let LAST_RECORDS = null;
+refreshCapInputs();
+document.getElementById('btnApplyCaps').addEventListener('click', () => {
+  const m20 = parseFloat(document.getElementById('capMax20').value);
+  const m100 = parseFloat(document.getElementById('capMax100').value);
+  const m200 = parseFloat(document.getElementById('capMax200').value);
+  if (!isFinite(m20) || !isFinite(m100) || !isFinite(m200) || m20 <= 0 || m100 <= 0 || m200 <= 0) {
+    setStatus('Caps must be positive numbers', 'err'); return;
+  }
+  WEEKLY_CAPS = { max20: m20, max100: m100, max200: m200 };
+  saveCaps(WEEKLY_CAPS);
+  if (LAST_RECORDS) {
+    const a = analyze(LAST_RECORDS);
+    render(a);
+    setStatus('✓ Forecast updated with your caps.', 'ok');
+  } else {
+    setStatus('Caps saved. Run an analysis to see the new forecast.', 'ok');
+  }
+});
+
+// Copy command one-liner
+document.getElementById('btnCopyCmd').addEventListener('click', () => {
+  const cmd = document.getElementById('cmdText').textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = document.getElementById('btnCopyCmd');
+    const old = btn.textContent; btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = old; }, 1500);
+  }).catch(() => setStatus('Copy failed — select manually', 'err'));
+});
+
+// ===== Share card generator =====
+function drawShareCard(a, handle) {
+  const canvas = document.getElementById('shareCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 1200, H = 630;
+
+  // Warm cream background — linen-paper tone
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#FBF3E8');
+  grad.addColorStop(1, '#F3E6D2');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  const FONT = '-apple-system, "SF Pro Display", "Inter", system-ui, sans-serif';
+  const ACCENT = '#C2410C';     // deep tangerine — strong on cream
+  const INK = '#2B1810';        // warm near-black — for hero number
+  const MUTED = '#8A6F5C';      // warm muted taupe — for captions
+
+  // Brand — top center, small
+  ctx.textAlign = 'center';
+  ctx.fillStyle = ACCENT;
+  ctx.font = `600 22px ${FONT}`;
+  ctx.fillText('🔥 BurnCheck', W / 2, 80);
+
+  // Tiny label — below brand
+  ctx.fillStyle = MUTED;
+  ctx.font = `500 14px ${FONT}`;
+  ctx.textBaseline = 'alphabetic';
+  const label = (handle ? handle + ' · ' : '') + 'LAST 7 DAYS ON CLAUDE CODE';
+  // simulate letter-spacing 0.12em
+  const chars = label.split('');
+  let lx = 0;
+  const widths = chars.map(c => ctx.measureText(c).width + 1.6);
+  const totalW = widths.reduce((s, w) => s + w, 0);
+  let x = W / 2 - totalW / 2;
+  for (let i = 0; i < chars.length; i++) {
+    ctx.textAlign = 'left';
+    ctx.fillText(chars[i], x, 110);
+    x += widths[i];
+  }
+
+  // Hero — giant $ number, centered both axes, no decoration
+  ctx.textAlign = 'center';
+  ctx.fillStyle = INK;
+  // Size scales with digit count to never overflow 80% of W
+  const costStr = '$' + (a.totalCost7d >= 1000 ? a.totalCost7d.toFixed(0) : a.totalCost7d.toFixed(1));
+  let heroSize = 260;
+  ctx.font = `700 ${heroSize}px ${FONT}`;
+  while (ctx.measureText(costStr).width > W * 0.78 && heroSize > 140) {
+    heroSize -= 8;
+    ctx.font = `700 ${heroSize}px ${FONT}`;
+  }
+  // Tight letter-spacing effect: use negative by drawing digit-by-digit? Keep default for legibility.
+  ctx.fillText(costStr, W / 2, H / 2 + heroSize * 0.12);
+
+  // "burned this week" caption — small, muted, right under the number
+  ctx.fillStyle = ACCENT;
+  ctx.font = `600 18px ${FONT}`;
+  // uppercase + letter-spacing
+  const caption = 'BURNED THIS WEEK';
+  const capChars = caption.split('');
+  const capWidths = capChars.map(c => ctx.measureText(c).width + 2.2);
+  const capTotal = capWidths.reduce((s, w) => s + w, 0);
+  let cx = W / 2 - capTotal / 2;
+  for (let i = 0; i < capChars.length; i++) {
+    ctx.textAlign = 'left';
+    ctx.fillText(capChars[i], cx, H / 2 + heroSize * 0.12 + 40);
+    cx += capWidths[i];
+  }
+
+  // Tagline — single line, dynamic, muted
+  ctx.textAlign = 'center';
+  ctx.fillStyle = MUTED;
+  ctx.font = `400 20px ${FONT}`;
+  const fmtT = n => n >= 1e9 ? (n/1e9).toFixed(1)+'B' : n >= 1e6 ? (n/1e6).toFixed(0)+'M' : (n/1e3).toFixed(0)+'K';
+  const topModel = Object.entries(a.byModel).sort((x,y)=>y[1].cost-x[1].cost)[0];
+  const topShare = topModel ? (topModel[1].cost / a.totalCost7d * 100).toFixed(0) : 0;
+  const topName = topModel ? topModel[0].replace('claude-','').replace(/-\d{8}$/,'').replace(/-\d+-\d+(-\d+)?$/,'') : '';
+  const meta = `${fmtT(a.totalTokens7d)} tokens  ·  ${a.totalCalls7d.toLocaleString()} calls  ·  ${topShare}% on ${topName}`;
+  ctx.fillText(meta, W / 2, H - 130);
+
+  // Flex tagline — small italic below meta
+  ctx.fillStyle = INK;
+  ctx.font = `500 22px ${FONT}`;
+  let tagline;
+  if (a.totalCost7d > 2000) tagline = `That's ${(a.totalCost7d/320).toFixed(1)}× a Max $200 subscription.`;
+  else if (a.totalCost7d > 500) tagline = `That's ${(a.totalCost7d/140).toFixed(1)}× a Max $100 subscription.`;
+  else if (a.totalCost7d > 100) tagline = `Max $100 territory — heavy but not crazy.`;
+  else if (a.totalCost7d > 25) tagline = `Max $20 is carrying my week.`;
+  else tagline = `Lightweight week. Savings mode engaged.`;
+  ctx.fillText(tagline, W / 2, H - 90);
+
+  // Hairline divider above URL
+  ctx.fillStyle = '#D9C7B0';
+  ctx.fillRect(W / 2 - 120, H - 58, 240, 1);
+
+  // URL at bottom — centered, subtle
+  ctx.textAlign = 'center';
+  ctx.fillStyle = MUTED;
+  ctx.font = `400 14px "SF Mono", Menlo, monospace`;
+  ctx.fillText('genie-j.github.io/burncheck', W / 2, H - 32);
+}
+
+document.getElementById('btnGenCard').addEventListener('click', () => {
+  if (!window.LAST_ANALYSIS) { setStatus('Run an analysis first', 'err'); return; }
+  const handle = document.getElementById('shareHandle').value.trim();
+  drawShareCard(window.LAST_ANALYSIS, handle);
+  const res = document.getElementById('shareResult');
+  res.style.display = 'block';
+  // Build X intent link
+  const cost = window.LAST_ANALYSIS.totalCost7d;
+  const tweetText = `I burned $${cost >= 1000 ? cost.toFixed(0) : cost.toFixed(1)} on Claude Code this week 🔥\n\nBurnCheck shows your weekly Claude spend, predicts cap hits, and flags model-swap savings. All client-side. https://genie-j.github.io/burncheck/`;
+  document.getElementById('btnTweetCard').href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
+});
+
+document.getElementById('btnDownloadCard').addEventListener('click', () => {
+  const canvas = document.getElementById('shareCanvas');
+  const link = document.createElement('a');
+  link.download = `burncheck-${new Date().toISOString().substring(0,10)}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+document.getElementById('btnCopyCard').addEventListener('click', async () => {
+  try {
+    const canvas = document.getElementById('shareCanvas');
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        const btn = document.getElementById('btnCopyCard');
+        const old = btn.textContent; btn.textContent = '✓ Copied!';
+        setTimeout(() => btn.textContent = old, 1500);
+      } catch (e) { setStatus('Copy failed — use Download instead', 'err'); }
+    });
+  } catch (e) { setStatus('Clipboard not supported — use Download instead', 'err'); }
+});
+
+// Auto-run demo on load so user sees a populated dashboard immediately
+(function autoLoadDemo() {
+  try {
+    const parsed = demoRecords();
+    LAST_RECORDS = parsed.records;
+    const a = analyze(parsed.records);
+    render(a);
+    setCTAMode('sample');
+  } catch (err) {
+    console.error('Demo auto-load failed:', err);
+  }
+})();
+</script>
+</body>
+</html>
